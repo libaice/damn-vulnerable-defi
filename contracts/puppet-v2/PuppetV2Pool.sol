@@ -22,6 +22,7 @@ contract PuppetV2Pool {
     IERC20 private _token;
     IERC20 private _weth;
 
+    // @audit - Mapping of user deposits
     mapping(address => uint256) public deposits;
 
     event Borrowed(address indexed borrower, uint256 depositRequired, uint256 borrowAmount, uint256 timestamp);
